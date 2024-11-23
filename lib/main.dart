@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
+import 'welcome_screen.dart';
 import 'evacuation_home_page.dart';
-import 'map_test.dart'; // Import the separated logic file
 
 void main() {
-  runApp(EvacuationApp());
+  runApp(MyApp());
 }
 
-class EvacuationApp extends StatelessWidget {
+class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'ResQme',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: EvacuationHomePage(),
+      title: 'ResQMe',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: WelcomeScreen(), // Start with the welcome screen
     );
   }
 }

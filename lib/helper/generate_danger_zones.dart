@@ -5,11 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 /// Generates a JSON file with 3 non-intersecting danger zones
-///
-
-Set<Polygon> getDangerZonePolygons(LatLng currentLocation) {
+Set<Polygon> getDangerZonePolygons(LatLng currentLocation, double inDangerRay) {
   // Get danger zones as a List<Map<String, dynamic>>
-  List<Map<String, dynamic>> dangerZones = getDangerZones(currentLocation);
+  List<Map<String, dynamic>> dangerZones = getDangerZonesWithinRay(currentLocation, inDangerRay);
 
   // Convert each zone into a Polygon
   return dangerZones.map((zone) {
@@ -27,8 +25,8 @@ Set<Polygon> getDangerZonePolygons(LatLng currentLocation) {
   }).toSet(); // Convert the Iterable to a Set
 }
 
-
-List<Map<String, dynamic>> getDangerZones(LatLng currentLocation) {
+/// Filters danger zones within a given radius (inDangerRay) from the current location
+List<Map<String, dynamic>> getDangerZonesWithinRay(LatLng currentLocation, double inDangerRay) {
   Random random = Random();
   List<Map<String, dynamic>> dangerZones = [];
 
@@ -51,11 +49,25 @@ List<Map<String, dynamic>> getDangerZones(LatLng currentLocation) {
     });
 
     if (!intersects) {
-      dangerZones.add({
-        "id": "zone_${i + 1}",
-        "name": "Danger Zone ${i + 1}",
-        "coordinates": coordinates,
-      });
+      double centerLat = baseLat + 0.001;
+      double centerLng = baseLng + 0.001;
+      double distance = _calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        centerLat,
+        centerLng,
+      );
+
+      // Only add zones within the inDangerRay
+      if (distance <= inDangerRay) {
+        dangerZones.add({
+          "id": "zone_${i + 1}",
+          "name": "Danger Zone ${i + 1}",
+          "coordinates": coordinates,
+        });
+      } else {
+        i--; // Retry if the zone is out of range
+      }
     } else {
       i--; // Retry if intersection occurs
     }
@@ -63,16 +75,14 @@ List<Map<String, dynamic>> getDangerZones(LatLng currentLocation) {
   return dangerZones;
 }
 
-Future<void> generateDangerZonesJson(LatLng currentLocation, String filePath) async {
-
-  List<Map<String, dynamic>> dangerZones = getDangerZones(currentLocation);
-
+/// Saves the filtered danger zones to a JSON file
+Future<void> generateDangerZonesJson(LatLng currentLocation, String filePath, double inDangerRay) async {
+  List<Map<String, dynamic>> dangerZones = getDangerZonesWithinRay(currentLocation, inDangerRay);
 
   // Save the danger zones to a JSON file
   String jsonString = json.encode(dangerZones);
   File file = File(filePath);
   await file.writeAsString(jsonString);
-  print("Danger zones JSON file saved to $filePath");
 }
 
 /// Checks if two polygons intersect
@@ -124,4 +134,21 @@ bool _doLinesIntersect(LatLng a1, LatLng a2, LatLng b1, LatLng b2) {
   if (o4 == 0 && onSegment(b1, a2, b2)) return true;
 
   return false;
+}
+
+/// Calculates the distance (in meters) between two points
+double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+  const double earthRadius = 6371000; // in meters
+  double dLat = _toRadians(lat2 - lat1);
+  double dLng = _toRadians(lng2 - lng1);
+
+  double a = sin(dLat / 2) * sin(dLat / 2) +
+      cos(_toRadians(lat1)) * cos(_toRadians(lat2)) * sin(dLng / 2) * sin(dLng / 2);
+  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+  return earthRadius * c;
+}
+
+double _toRadians(double degrees) {
+  return degrees * pi / 180;
 }

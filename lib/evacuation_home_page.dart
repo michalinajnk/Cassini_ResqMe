@@ -1,14 +1,20 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:http/http.dart' as http;
-
-import 'mock_helper/generate_danger_zones.dart';
-import 'mock_helper/get_route.dart';
+import 'helper/generate_danger_zones.dart';
+import 'helper/get_route.dart';
 
 class EvacuationHomePage extends StatefulWidget {
+  final double inDangerRay;
+  final bool allowBackgroundNotifications;
+
+  EvacuationHomePage({
+    required this.inDangerRay,
+    required this.allowBackgroundNotifications,
+  });
+
   @override
   _EvacuationHomePageState createState() => _EvacuationHomePageState();
 }
@@ -21,16 +27,27 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
   LatLng? _destinationPosition;
   Polyline? _routePolyline;
   TextEditingController _destinationController = TextEditingController();
-
+  String _travelMode = "driving";
+  double _inDangerRay =  500;
   final String _googleApiKey = 'AIzaSyAtuucM4ZmPmcqZiYwGZUpme_h5CYsXVD0';
 
   @override
   void initState() {
     super.initState();
+    _setupBackgroundNotifications();
     _initLocationService();
     _loadDangerZonesFromJson();
+    _inDangerRay = widget.inDangerRay;
   }
 
+  Future<void> _setupBackgroundNotifications() async {
+    if (widget.allowBackgroundNotifications) {
+      print("Background notifications enabled for ${widget.inDangerRay} meters.");
+      // Set up background notifications logic if required.
+    }
+  }
+
+  /// Initialize Location Services
   Future<void> _initLocationService() async {
     bool serviceEnabled;
     geolocator.LocationPermission permission;
@@ -66,49 +83,23 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
         position: _currentPosition!,
         infoWindow: InfoWindow(title: "Your Location"),
       ));
-      getDangerZonePolygons(LatLng(position.latitude, position.longitude));
+      _dangerZonePolygons = getDangerZonePolygons(LatLng(position.latitude, position.longitude), _inDangerRay);
     });
   }
 
+  /// Load Danger Zones from JSON
   Future<void> _loadDangerZonesFromJson() async {
     try {
-      // Load danger zones from JSON
-      //String jsonString = await rootBundle.loadString('C:/Users/MichalinaJanik/AndroidStudioProjects/cassini_hackathon/data/danger_zones.json');
-      //List<dynamic> data = json.decode(jsonString);
-
-      Set<Polygon> polygons = getDangerZonePolygons(_currentPosition!); //{}
+      Set<Polygon> polygons = getDangerZonePolygons(_currentPosition!, _inDangerRay);
       setState(() {
         _dangerZonePolygons = polygons;
       });
-    }catch (e)
-      {
-          print("Error loading danger zones: $e");
-      }
+    } catch (e) {
+      print("Error loading danger zones: $e");
+    }
   }
-    //  for (var zone in data) {
-    //  List<LatLng> coordinates = (zone['coordinates'] as List)
-    //   .map((point) => LatLng(point['lat'], point['lng']))
-    //   .toList();
 
-    //polygons.add(
-    //Polygon(
-    //polygonId: PolygonId(zone['id']),
-    //points: coordinates,
-    //fillColor: Colors.red.withOpacity(0.3),
-    //strokeColor: Colors.red,
-    //  strokeWidth: 2,
-    //  ),
-    //  );
-    //}
-
-    //setState(() {
-    //    _dangerZonePolygons = polygons;
-    //   });
-    //  } catch (e) {
-    //    print("Error loading danger zones: $e");
-    //  }
-    // }
-
+  /// Set Destination from Map Tap
   Future<void> _setDestinationFromTap(LatLng tappedPosition) async {
     final url =
         'https://maps.googleapis.com/maps/api/geocode/json?latlng=${tappedPosition.latitude},${tappedPosition.longitude}&key=$_googleApiKey';
@@ -128,13 +119,14 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
           ));
         });
 
-        await _fetchRoute(_currentPosition!, _destinationPosition!);
+        _askTravelMode(); // Ask travel mode after destination is set
       }
     } catch (e) {
       print("Error setting destination from tap: $e");
     }
   }
 
+  /// Set Destination from Search
   Future<void> _setDestinationFromSearch(String destination) async {
     final url =
         'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$destination&inputtype=textquery&fields=geometry,formatted_address&key=$_googleApiKey';
@@ -156,18 +148,63 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
           ));
         });
 
-        await _fetchRoute(_currentPosition!, _destinationPosition!);
+        _askTravelMode(); // Ask travel mode after destination is set
       }
     } catch (e) {
       print("Error setting destination: $e");
     }
   }
 
+  /// Ask the User for Travel Mode
+  Future<void> _askTravelMode() async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Select Travel Mode"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text("Driving"),
+                leading: Radio<String>(
+                  value: "driving",
+                  groupValue: _travelMode,
+                  onChanged: (value) {
+                    setState(() {
+                      _travelMode = value!;
+                    });
+                    Navigator.of(context).pop();
+                    _fetchRoute(_currentPosition!, _destinationPosition!);
+                  },
+                ),
+              ),
+              ListTile(
+                title: Text("Walking"),
+                leading: Radio<String>(
+                  value: "walking",
+                  groupValue: _travelMode,
+                  onChanged: (value) {
+                    setState(() {
+                      _travelMode = value!;
+                    });
+                    Navigator.of(context).pop();
+                    _fetchRoute(_currentPosition!, _destinationPosition!);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Fetch Route Based on Travel Mode and Danger Zones
   Future<void> _fetchRoute(LatLng start, LatLng end) async {
-
-    // From the output from guys
-    List<LatLng> simulatedRoute = findSafeRoutePolygons(start, end, _dangerZonePolygons);
-
+    List<LatLng> safeRoute_ListPoints = findSafeRoutePolygons(start, end, _dangerZonePolygons);
+    List<LatLng> simulatedRoute =
+    await getActualRoutePolyline(safeRoute_ListPoints, _travelMode, _googleApiKey);
     setState(() {
       _routePolyline = Polyline(
         polylineId: PolylineId("route"),
@@ -178,6 +215,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
     });
   }
 
+  /// Build Google Map Widget
   Widget _buildGoogleMap() {
     return GoogleMap(
       onMapCreated: (GoogleMapController controller) {
@@ -193,11 +231,12 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
       onTap: (LatLng position) {
-        _setDestinationFromTap(position); // Set destination from tap
+        _setDestinationFromTap(position);
       },
     );
   }
 
+  /// Build Search Bar
   Widget _buildSearchBar() {
     return Positioned(
       top: 10,
