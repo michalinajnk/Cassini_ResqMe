@@ -11,11 +11,11 @@ class EvacuationApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Evacuation Tracker',
+      title: 'ResQme',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MapSample(), // Use the separated home page
+      home: EvacuationHomePage(), // Use the separated home page
     );
   }
 }

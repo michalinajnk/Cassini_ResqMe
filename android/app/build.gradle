@@ -6,39 +6,45 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cassini_hackathon"
-    compileSdk = 33
-    ndkVersion = flutter.ndkVersion
+    namespace = "com.example.cassini_hackathon" // Ensure this matches your app's package name.
+    compileSdk = 34 // Use a stable version (API 34). Change to API 35 only if necessary.
+    ndkVersion = "27.0.12077973" // Explicitly set the NDK version to avoid errors.
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        // Target version needs to be 8 or higher
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+
+        // Enable desugaring
+        coreLibraryDesugaringEnabled true
+    }
+
+    dependencies {
+        coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.3'
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = "1.8" // Correct way to define `jvmTarget`.
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.cassini_hackathon"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21
-        targetSdk = 33
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId = "com.example.cassini_hackathon" // Your app's unique ID.
+        minSdk = 21 // Minimum Android version supported.
+        targetSdk = 34 // Use a stable version (API 34). Change to 35 if you're targeting newer features.
+        versionCode = 1 // Increment for new releases.
+        versionName = "1.0"
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            signingConfig = signingConfigs.debug // Use `debug` for testing.
+            minifyEnabled false // Disable code shrinking for now.
+            shrinkResources false // Disable resource shrinking for now.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
 
 flutter {
-    source = "../.."
+    source = "../.." // Points to the root Flutter project directory.
 }
