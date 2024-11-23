@@ -66,6 +66,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
         position: _currentPosition!,
         infoWindow: InfoWindow(title: "Your Location"),
       ));
+      getDangerZonePolygons(LatLng(position.latitude, position.longitude));
     });
   }
 
