@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
-import 'package:location/location.dart' as location;
+import 'package:http/http.dart' as http;
+
+import 'mock_helper/generate_danger_zones.dart';
+import 'mock_helper/get_route.dart';
 
 class EvacuationHomePage extends StatefulWidget {
   @override
@@ -10,21 +14,23 @@ class EvacuationHomePage extends StatefulWidget {
 }
 
 class _EvacuationHomePageState extends State<EvacuationHomePage> {
-  late GoogleMapController _mapController;
-  Set<Marker> _dangerZoneMarkers = {};
+  GoogleMapController? _mapController;
+  Set<Polygon> _dangerZonePolygons = {};
+  Set<Marker> _markers = {};
   LatLng? _currentPosition;
-  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
+  LatLng? _destinationPosition;
+  Polyline? _routePolyline;
+  TextEditingController _destinationController = TextEditingController();
+
+  final String _googleApiKey = 'AIzaSyAtuucM4ZmPmcqZiYwGZUpme_h5CYsXVD0';
 
   @override
   void initState() {
     super.initState();
     _initLocationService();
-    _initNotifications();
-    _loadDangerZones();
+    _loadDangerZonesFromJson();
   }
 
-  // Initialize Location Services
   Future<void> _initLocationService() async {
     bool serviceEnabled;
     geolocator.LocationPermission permission;
@@ -48,124 +54,172 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
     }
 
     geolocator.Position position = await geolocator.Geolocator.getCurrentPosition(
-      locationSettings: geolocator.LocationSettings(accuracy: geolocator.LocationAccuracy.high),
+      locationSettings: geolocator.LocationSettings(
+        accuracy: geolocator.LocationAccuracy.high,
+      ),
     );
-    LatLng newPosition = LatLng(position.latitude, position.longitude);
 
     setState(() {
-      _currentPosition = newPosition;
+      _currentPosition = LatLng(position.latitude, position.longitude);
+      _markers.add(Marker(
+        markerId: MarkerId("current_location"),
+        position: _currentPosition!,
+        infoWindow: InfoWindow(title: "Your Location"),
+      ));
     });
+  }
 
-    if (_mapController != null) {
-      _updateMapLocation(newPosition);
-    }
+  Future<void> _loadDangerZonesFromJson() async {
+    try {
+      // Load danger zones from JSON
+      //String jsonString = await rootBundle.loadString('C:/Users/MichalinaJanik/AndroidStudioProjects/cassini_hackathon/data/danger_zones.json');
+      //List<dynamic> data = json.decode(jsonString);
 
-    geolocator.Geolocator.getPositionStream(
-      locationSettings: geolocator.LocationSettings(accuracy: geolocator.LocationAccuracy.high),
-    ).listen((geolocator.Position position) {
-      LatLng newPosition = LatLng(position.latitude, position.longitude);
-
+      Set<Polygon> polygons = getDangerZonePolygons(_currentPosition!); //{}
       setState(() {
-        _currentPosition = newPosition;
+        _dangerZonePolygons = polygons;
       });
-
-      _updateMapLocation(newPosition);
-      _checkProximityToDangerZones();
-    });
-  }
-
-  void _updateMapLocation(LatLng position) {
-    _mapController.animateCamera(CameraUpdate.newLatLng(position));
-  }
-
-  // Initialize Notifications
-  void _initNotifications() {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-    InitializationSettings(android: initializationSettingsAndroid);
-
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
-  // Show Notification
-  Future<void> _showNotification(String message) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-    AndroidNotificationDetails(
-      'danger_zone_channel',
-      'Danger Zone Alerts',
-      channelDescription: 'Alerts when entering a danger zone',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-
-    const NotificationDetails platformChannelSpecifics =
-    NotificationDetails(android: androidPlatformChannelSpecifics);
-
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      'Danger Zone Alert',
-      message,
-      platformChannelSpecifics,
-    );
-  }
-
-  // Load Predefined Danger Zones
-  void _loadDangerZones() {
-    // Example danger zones
-    List<LatLng> dangerZones = [
-      LatLng(37.7749, -122.4194), // San Francisco
-      LatLng(34.0522, -118.2437), // Los Angeles
-    ];
-
-    setState(() {
-      _dangerZoneMarkers = dangerZones
-          .map((zone) => Marker(
-        markerId: MarkerId(zone.toString()),
-        position: zone,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(title: 'Danger Zone'),
-      ))
-          .toSet();
-    });
-  }
-
-  // Check Proximity to Danger Zones
-  void _checkProximityToDangerZones() {
-    if (_currentPosition == null) return;
-
-    for (Marker marker in _dangerZoneMarkers) {
-      double distance = geolocator.Geolocator.distanceBetween(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-        marker.position.latitude,
-        marker.position.longitude,
-      );
-
-      if (distance < 500) {
-        // Danger zone proximity detected
-        _showNotification(
-            'You are within 500 meters of a danger zone. Please evacuate!');
-        break;
+    }catch (e)
+      {
+          print("Error loading danger zones: $e");
       }
+  }
+    //  for (var zone in data) {
+    //  List<LatLng> coordinates = (zone['coordinates'] as List)
+    //   .map((point) => LatLng(point['lat'], point['lng']))
+    //   .toList();
+
+    //polygons.add(
+    //Polygon(
+    //polygonId: PolygonId(zone['id']),
+    //points: coordinates,
+    //fillColor: Colors.red.withOpacity(0.3),
+    //strokeColor: Colors.red,
+    //  strokeWidth: 2,
+    //  ),
+    //  );
+    //}
+
+    //setState(() {
+    //    _dangerZonePolygons = polygons;
+    //   });
+    //  } catch (e) {
+    //    print("Error loading danger zones: $e");
+    //  }
+    // }
+
+  Future<void> _setDestinationFromTap(LatLng tappedPosition) async {
+    final url =
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=${tappedPosition.latitude},${tappedPosition.longitude}&key=$_googleApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final address = data['results'][0]['formatted_address'];
+
+        setState(() {
+          _destinationPosition = tappedPosition;
+          _markers.add(Marker(
+            markerId: MarkerId("destination"),
+            position: _destinationPosition!,
+            infoWindow: InfoWindow(title: address),
+          ));
+        });
+
+        await _fetchRoute(_currentPosition!, _destinationPosition!);
+      }
+    } catch (e) {
+      print("Error setting destination from tap: $e");
     }
   }
 
-  // Build Google Map Widget
+  Future<void> _setDestinationFromSearch(String destination) async {
+    final url =
+        'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$destination&inputtype=textquery&fields=geometry,formatted_address&key=$_googleApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final location = data['candidates'][0]['geometry']['location'];
+        final address = data['candidates'][0]['formatted_address'];
+
+        setState(() {
+          _destinationPosition =
+              LatLng(location['lat'], location['lng']); // Destination coordinates
+          _markers.add(Marker(
+            markerId: MarkerId("destination"),
+            position: _destinationPosition!,
+            infoWindow: InfoWindow(title: address),
+          ));
+        });
+
+        await _fetchRoute(_currentPosition!, _destinationPosition!);
+      }
+    } catch (e) {
+      print("Error setting destination: $e");
+    }
+  }
+
+  Future<void> _fetchRoute(LatLng start, LatLng end) async {
+
+    // From the output from guys
+    List<LatLng> simulatedRoute = findSafeRoutePolygons(start, end, _dangerZonePolygons);
+
+    setState(() {
+      _routePolyline = Polyline(
+        polylineId: PolylineId("route"),
+        points: simulatedRoute,
+        color: Colors.blue,
+        width: 4,
+      );
+    });
+  }
+
   Widget _buildGoogleMap() {
     return GoogleMap(
       onMapCreated: (GoogleMapController controller) {
         _mapController = controller;
       },
-      markers: _dangerZoneMarkers,
+      polygons: _dangerZonePolygons,
+      markers: _markers,
+      polylines: _routePolyline != null ? {_routePolyline!} : {},
       initialCameraPosition: CameraPosition(
-        target: _currentPosition ?? LatLng(37.7749, -122.4194), // Default position
-        zoom: 12,
+        target: _currentPosition ?? LatLng(0, 0),
+        zoom: 14,
       ),
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
+      onTap: (LatLng position) {
+        _setDestinationFromTap(position); // Set destination from tap
+      },
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Positioned(
+      top: 10,
+      left: 10,
+      right: 10,
+      child: Card(
+        elevation: 4,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: TextField(
+            controller: _destinationController,
+            decoration: InputDecoration(
+              hintText: 'Enter destination',
+              suffixIcon: IconButton(
+                icon: Icon(Icons.search),
+                onPressed: () {
+                  _setDestinationFromSearch(_destinationController.text.trim());
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -173,12 +227,17 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Evacuation Tracker'),
-        backgroundColor: Colors.blue,
+        title: Text('ResQMe'),
+        backgroundColor: Colors.black12,
       ),
-      body: _currentPosition == null
-          ? Center(child: CircularProgressIndicator())
-          : _buildGoogleMap(),
+      body: Stack(
+        children: [
+          _currentPosition == null
+              ? Center(child: CircularProgressIndicator())
+              : _buildGoogleMap(),
+          _buildSearchBar(),
+        ],
+      ),
     );
   }
 }

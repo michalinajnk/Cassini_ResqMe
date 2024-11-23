@@ -15,7 +15,7 @@ class EvacuationApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: EvacuationHomePage(), // Use the separated home page
+      home: EvacuationHomePage(),
     );
   }
 }
