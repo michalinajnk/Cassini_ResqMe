@@ -1,4 +1,4 @@
-import 'package:cassini_hackathon/settings_screen.dart';
+import 'package:cassini_hackathon/views/settings_screen.dart';
 import 'package:flutter/material.dart';
 
 class WelcomeScreen extends StatefulWidget {

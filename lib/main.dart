@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'welcome_screen.dart';
-import 'evacuation_home_page.dart';
+import 'views/welcome_screen.dart';
+import 'views/evacuation_home_page.dart';
 
 void main() {
   runApp(MyApp());

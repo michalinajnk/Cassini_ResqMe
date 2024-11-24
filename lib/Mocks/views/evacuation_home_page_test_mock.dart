@@ -1,25 +1,27 @@
 import 'dart:convert';
+import 'package:cassini_hackathon/services/DataFetcher.dart';
+import 'package:cassini_hackathon/services/DataSender.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:http/http.dart' as http;
-import 'helper/generate_danger_zones.dart';
-import 'helper/get_route.dart';
+import '../../helper/generate_danger_zones.dart';
+import '../../helper/get_route.dart';
 
-class EvacuationHomePage extends StatefulWidget {
+class EvacuationHomePageMock extends StatefulWidget {
   final double inDangerRay;
   final bool allowBackgroundNotifications;
 
-  EvacuationHomePage({
+  EvacuationHomePageMock({
     required this.inDangerRay,
     required this.allowBackgroundNotifications,
   });
 
   @override
-  _EvacuationHomePageState createState() => _EvacuationHomePageState();
+  _EvacuationHomePageMock createState() => _EvacuationHomePageMock();
 }
 
-class _EvacuationHomePageState extends State<EvacuationHomePage> {
+class _EvacuationHomePageMock extends State<EvacuationHomePageMock> {
   GoogleMapController? _mapController;
   Set<Polygon> _dangerZonePolygons = {};
   Set<Marker> _markers = {};
@@ -30,6 +32,10 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
   String _travelMode = "driving";
   double _inDangerRay =  500;
   final String _googleApiKey = 'AIzaSyAtuucM4ZmPmcqZiYwGZUpme_h5CYsXVD0';
+  late DataSender _dataSender;
+  late DataFetcher _dataFetcher;
+
+
 
   @override
   void initState() {
@@ -38,7 +44,83 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
     _initLocationService();
     _loadDangerZonesFromJson();
     _inDangerRay = widget.inDangerRay;
+
+    final String baseUrl = "http://localhost:5000"; // Local Flask server
+    _dataSender = DataSender(baseUrl);
+    _dataFetcher = DataFetcher(baseUrl);
   }
+
+  Future<void> _sendUserLocationAndTarget() async {
+    if (_currentPosition == null || _destinationPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Please set both your current location and destination.")),
+      );
+      return;
+    }
+
+    try {
+      await _dataSender.sendUserLocationAndTarget(
+        _currentPosition!,
+        _destinationPosition!,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Location and target sent to the server.")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error sending data: $e")),
+      );
+    }
+  }
+
+  Future<void> _fetchProcessedData() async {
+    try {
+      final data = await _dataFetcher.fetchProcessedData();
+
+      // Extract route and danger zones
+      final List<dynamic> route = data["path"]; // List of route points
+      final List<dynamic> dangerZones = data["danger_zone"]; // List of polygons
+
+      // Convert route to Polyline
+      final polylinePoints = route
+          .map((point) => LatLng(point[1], point[0])) // Convert [lon, lat] to LatLng
+          .toList();
+
+      // Convert danger zones to Polygons
+      final dangerZonePolygons = dangerZones.map((zone) {
+        final points = (zone as List)
+            .map((point) => LatLng(point[1], point[0]))
+            .toList();
+        return Polygon(
+          polygonId: PolygonId(zone.hashCode.toString()),
+          points: points,
+          fillColor: Colors.red.withOpacity(0.3),
+          strokeColor: Colors.red,
+          strokeWidth: 2,
+        );
+      }).toSet();
+
+      setState(() {
+        _routePolyline = Polyline(
+          polylineId: PolylineId("route"),
+          points: polylinePoints,
+          color: Colors.blue,
+          width: 4,
+        );
+        _dangerZonePolygons = dangerZonePolygons;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error fetching data: $e")),
+      );
+    }
+  }
+
+  Future<void> _onDestinationSet() async {
+    await _sendUserLocationAndTarget();
+    await _fetchProcessedData();
+  }
+
 
   Future<void> _setupBackgroundNotifications() async {
     if (widget.allowBackgroundNotifications) {
