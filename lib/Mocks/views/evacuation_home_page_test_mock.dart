@@ -75,7 +75,7 @@ class _EvacuationHomePageMock extends State<EvacuationHomePageMock> {
 
   Future<void> _fetchProcessedData() async {
     try {
-      final data = await _dataFetcher.fetchProcessedData();
+      final data = await _dataFetcher.fetchProcessedData(_currentPosition!, _destinationPosition!);
 
       // Extract route and danger zones
       final List<dynamic> route = data["path"]; // List of route points

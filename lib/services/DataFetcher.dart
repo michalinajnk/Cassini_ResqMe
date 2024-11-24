@@ -7,24 +7,40 @@ class DataFetcher {
   DataFetcher(String baseUrl)
       : _dio = Dio(BaseOptions(
     baseUrl: baseUrl,
-    connectTimeout: const Duration(milliseconds: 5000),
-    receiveTimeout: const Duration(milliseconds: 5000),
+    connectTimeout: const Duration(milliseconds: 10000),
+    receiveTimeout: const Duration(milliseconds: 30000),
     headers: {"Content-Type": "application/json"},
   ));
 
   /// Fetches the processed route and danger zones from the server
-  Future<Map<String, dynamic>> fetchProcessedData() async {
+  Future<Map<String, dynamic>> fetchProcessedData(LatLng start,
+      LatLng target) async {
     try {
-      final response = await _dio.get("/navigate");
+      // GET request with query parameters
+      final response = await _dio.get(
+        "/navigate",
+        queryParameters: {
+          "start": "${start.longitude},${start.latitude}",
+          "target": "${target.longitude},${target.latitude}",
+        },
+      );
 
-      // Server response contains "path" (route) and "danger_zone" (polygons)
-      return response.data; // Map with keys: "path" and "danger_zone"
-    } on DioError catch (e) {
+      if (response.statusCode == 200 && response.data != null) {
+        return response.data as Map<String, dynamic>;
+      } else {
+        throw Exception("Invalid response: ${response.statusCode} - ${response
+            .statusMessage}");
+      }
+    } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception("Failed to fetch data: ${e.response?.statusCode}");
+        throw Exception(
+            "Failed to fetch data: ${e.response?.statusCode} - ${e.response
+                ?.data}");
       } else {
         throw Exception("Connection error: ${e.message}");
       }
     }
   }
 }
+
+

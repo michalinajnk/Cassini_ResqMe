@@ -104,42 +104,76 @@ def read_bbox_file(file_path):
         )  # safely parse the content into a list
     return bbox_list
 
+def mock_generate_path(start, target):
+    """
+    Generates a mock path as a list of coordinate points between start and target.
+    """
+    # Extract start and target coordinates
+    start_lon, start_lat = start
+    target_lon, target_lat = target
+
+    # Determine the number of steps in the mock path
+    steps = 100
+
+    # Generate intermediate points between start and target
+    path = []
+    for i in range(steps + 1):
+        fraction = i / steps
+        lon = start_lon + fraction * (target_lon - start_lon)
+        lat = start_lat + fraction * (target_lat - start_lat)
+        path.append([lon, lat])
+
+    return path
+
 
 @app.route("/", methods=["GET"])
 def home():
     return "Welcome to ResQMe app server. Use /navigate for API requests.", 200
 
-@app.route("/navigate",  methods=["GET", "POST"])
+
+@app.route("/navigate", methods=["GET", "POST"])
 def process_coordinates_endpoint():
+    start, target = None, None
+
     if request.method == "GET":
-        return jsonify({"message": "This is the /navigate endpoint. Use POST to send data."})
+        # Extract and validate query parameters
+        start = request.args.get("start")
+        target = request.args.get("target")
 
-    # Receive JSON data from the request
-    data = request.get_json()
+        if not start or not target:
+            return jsonify({"error": "Missing 'start' or 'target'"}), 400
 
-    # Ensure the data contains 'coordinates'
-    if "start" not in data or "target" not in data:
-        return jsonify({"error": "Missing 'start' or 'target' in the request"}), 400
+        # Convert strings to lists of floats
+        try:
+            start = [float(coord) for coord in start.split(",")]
+            target = [float(coord) for coord in target.split(",")]
+        except ValueError:
+            return jsonify({"error": "Invalid 'start' or 'target' format"}), 400
 
-    start = data["start"]  # [longitude, latitude]
-    target = data["target"]
-    rect_coord = read_bbox_file("tmp_rect_coord.txt")
-    danger_zone_coord = process_danger_zone(rect_coord)
+    elif request.method == "POST":
+        # Extract and validate JSON payload
+        data = request.get_json()
+        if not data or "start" not in data or "target" not in data:
+            return jsonify({"error": "Missing 'start' or 'target' in the request"}), 400
 
-    # Process the coordinates
-    # tmp hardcoded:
-    start = [17.62018, 50.75666]
-    target = [17.62067220807697, 50.69273810408264]
+        start = data["start"]
+        target = data["target"]
 
-    # processed_coord = process_coordinates(start, target, danger_zone_coord)
-    # TEMPORARY!!!!
-    with open("tmp_processed_coord.txt", "r") as file:
-        # Read the content of the file and parse it into a list of lists
-        processed_coord = ast.literal_eval(
-            file.read()
-        )  # safely parse the content into a list
+    # Validate start and target are lists of coordinates
+    if not (isinstance(start, list) and isinstance(target, list) and len(start) == 2 and len(target) == 2):
+        return jsonify({"error": "'start' and 'target' must be lists of two coordinates [longitude, latitude]"}), 400
 
-    # Return the processed coordinates as a JSON response
+    try:
+        rect_coord = read_bbox_file("tmp_rect_coord.txt")
+        danger_zone_coord = process_danger_zone(rect_coord)
+
+        # Temporary hardcoded processed data (replace with actual processing logic)
+        with open("tmp_processed_coord.txt", "r") as file:
+            processed_coord = ast.literal_eval(file.read())  # safely parse the content into a list
+    except Exception as e:
+        return jsonify({"error": f"Server processing error: {str(e)}"}), 500
+
+    # Return the processed coordinates and danger zones
     return jsonify({"path": processed_coord, "danger_zone": danger_zone_coord})
 
 

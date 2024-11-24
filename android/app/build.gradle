@@ -9,7 +9,6 @@ android {
     namespace = "com.example.cassini_hackathon" // Ensure this matches your app's package name.
     compileSdk = 34 // Use a stable version (API 34). Change to API 35 only if necessary.
     ndkVersion = "27.0.12077973" // Explicitly set the NDK version to avoid errors.
-
     compileOptions {
         // Target version needs to be 8 or higher
         sourceCompatibility JavaVersion.VERSION_1_8

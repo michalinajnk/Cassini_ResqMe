@@ -41,12 +41,15 @@ Future<List<LatLng>> getActualRoutePolyline(
           finalPolylinePoints.addAll(_decodePolyline(polyline));
         } else {
           print("No route found for segment: $start -> $end");
+          return routePoints;
         }
       } else {
         print("Failed to fetch route segment: ${response.body}");
+        return routePoints;
       }
     } catch (e) {
       print("Error fetching route segment: $e");
+      return routePoints;
     }
   }
 
