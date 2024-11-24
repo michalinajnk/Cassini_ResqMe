@@ -7,6 +7,8 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:http/http.dart' as http;
+import 'navigation_screen.dart';
+
 
 import '../helper/get_route.dart';
 
@@ -37,6 +39,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
   bool _isSearchBarExpanded = true;
   late DataFetcher _dataFetcher;
   late DataSender _dataSender;
+  bool _showNotification = false;
   double _inDangerRay = 500;
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -128,6 +131,19 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
   /// Handles the destination selection process
   Future<void> _onDestinationSet() async {
     if (_currentPosition == null || _destinationPosition == null) {
+      setState(() {
+        _showNotification = true; // Show notification if both locations are not set
+      });
+
+      // Automatically hide the notification after 3 seconds
+      Future.delayed(Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _showNotification = false;
+          });
+        }
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(
             "Please set both your current location and destination.")),
@@ -467,6 +483,8 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
         width: 4,
       );
     });
+
+
   }
 
   /// Center the map on the current location
@@ -638,64 +656,156 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
               heroTag: "toggleSearchBarButton",
             ),
           ),
+          // Notification Widget for Navigation Availability
+          if (_showNotification) _buildNavigationNotification(),
+          // Floating Action Buttons
           Align(
             alignment: Alignment.bottomLeft,
             child: Padding(
               padding: const EdgeInsets.all(10.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ScaleTransition(
-                    scale: _isHelpRequested
-                        ? _animation
-                        : AlwaysStoppedAnimation(1.0),
-                    child:
-                        SizedBox(
-                          width: 50.0, // Custom width
-                          height: 50.0, // Custom height
-                          child:
-                            FloatingActionButton
-                              (
-                              onPressed: _promptForHelp,
-                              child: Icon(Icons.warning_amber_outlined),
-                              backgroundColor: Colors.red,
-                              heroTag: "helpButton",
-                              tooltip: "Need Help",
-                            ),
-                        ),
-                  ),
-                  SizedBox(height: 10.0), // Space between buttons
-                  SizedBox(
-                    width: 50.0, // Custom width
-                    height: 50.0, // Custom height
-                    child:
-                        FloatingActionButton(
-                          onPressed: _centerMapOnCurrentLocation,
-                          child: Icon(Icons.my_location),
-                          backgroundColor: Colors.blue,
-                          heroTag: "currentLocationButton",
-                          tooltip: "Go to My Location",
-                        ),
-                  ),
-                  SizedBox(height: 10.0),
-                  SizedBox(
-                    width: 50.0, // Custom width
-                    height: 50.0, // Custom height
-                    child:
-                    FloatingActionButton(
-                      onPressed: _goToSettingsPage,
-                      child: Icon(Icons.settings),
-                      backgroundColor: Colors.blue,
-                      heroTag: "settingsButton",
-                      tooltip: "Go to Settings",
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildFABLayout(),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildNavigationNotification() {
+    return AnimatedOpacity(
+      opacity: _showNotification ? 1.0 : 0.0, // Toggle opacity
+      duration: Duration(milliseconds: 500), // Fade animation duration
+      child: Positioned(
+        top: 10.0,
+        left: 16.0,
+        right: 16.0,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 4.0,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            "Navigation available! Tap the button to start.",
+            style: TextStyle(color: Colors.deepPurple, fontSize: 16.0),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Remove notification after 3 seconds
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(() {
+      fn();
+      if (_routePolyline != null) {
+        Future.delayed(Duration(seconds: 3), () {
+          if (mounted) setState(() {}); // Clear the notification after 3 seconds
+        });
+      }
+    });
+  }
+
+  Widget _buildFAB(IconData icon, String tooltip, VoidCallback onPressed, Color color, String heroTag) {
+    return Center(
+      child: SizedBox(
+        width: 50.0, // Fixed width
+        height: 50.0, // Fixed height
+        child: FloatingActionButton(
+          onPressed: onPressed,
+          child: Icon(icon),
+          backgroundColor: color,
+          heroTag: heroTag,
+          tooltip: tooltip,
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildFABGrid({required Key key}) {
+    return Table(
+      key: key,
+      defaultColumnWidth: FixedColumnWidth(60.0), // Fixed button width with spacing
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          children: [
+            _buildFAB(Icons.warning_amber_outlined, "Need Help", _promptForHelp, Colors.red, "helpButton"),
+            _buildFAB(Icons.my_location, "Go to My Location", _centerMapOnCurrentLocation, Colors.blue, "currentLocationButton"),
+          ],
+        ),
+        TableRow(
+          children: [SizedBox(height: 10.0), SizedBox(height: 10.0)], // Spacer row
+        ),
+        TableRow(
+          children: [
+            _buildFAB(Icons.settings, "Go to Settings", _goToSettingsPage, Colors.blue, "settingsButton"),
+            _buildFAB(Icons.navigation, "Navigate to Destination", () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NavigationScreen(
+                    routeCoordinates: _routePolyline!.points,
+                  ),
+                ),
+              );
+            }, Colors.blue, "navigateButton"),
+          ],
+        ),
+      ],
+    );
+  }
+
+
+
+
+  Widget _buildFABLayout() {
+    bool isGrid = _routePolyline != null; // Switch to grid if navigation is available
+
+    return AnimatedSwitcher(
+      duration: Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+      child: Align(
+        alignment: Alignment.bottomLeft, // Align the grid to the bottom-left corner
+        child: Padding(
+          padding: const EdgeInsets.all(10.0), // Padding from edges
+          child: isGrid
+              ? _buildFABGrid(key: ValueKey('FABGrid')) // 2x2 grid layout
+              : _buildFABColumn(key: ValueKey('FABColumn')), // Column layout
+        ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildFABColumn({required Key key}) {
+    return Column(
+      key: key,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildFAB(Icons.warning_amber_outlined, "Need Help", _promptForHelp, Colors.red, "helpButton"),
+        SizedBox(height: 10.0),
+        _buildFAB(Icons.my_location, "Go to My Location", _centerMapOnCurrentLocation, Colors.blue, "currentLocationButton"),
+        SizedBox(height: 10.0),
+        _buildFAB(Icons.settings, "Go to Settings", _goToSettingsPage, Colors.blue, "settingsButton"),
+      ],
+    );
+  }
+
 }
