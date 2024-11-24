@@ -28,7 +28,10 @@ Once segmentation is completed, the next step is to mark the identified danger z
 
 6. Navigating with Skipping Danger Zones
 Once the danger zones are identified and marked, the system can suggest a safe navigation route that avoids these zones.
-.
+
+|                          |                         |
+:-------------------------:|:-------------------------:
+![](route1.png)  |  ![](route2.png) 
 
 
 # ResQMe Application
