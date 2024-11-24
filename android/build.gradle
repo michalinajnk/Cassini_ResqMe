@@ -1,0 +1,29 @@
+buildscript {
+    repositories {
+        google()  // Fetches dependencies from Google's Maven repository
+        mavenCentral()  // Fetches dependencies from Maven Central
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.0.2'  // Ensure this is the right version for your project
+        classpath 'com.android.tools:desugar_jdk_libs:2.1.3'  // This line is not necessary here and can be removed
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
