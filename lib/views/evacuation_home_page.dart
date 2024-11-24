@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../helper/get_route.dart';
 
+
 class EvacuationHomePage extends StatefulWidget {
   final double inDangerRay;
   final bool allowBackgroundNotifications;
@@ -23,7 +24,8 @@ class EvacuationHomePage extends StatefulWidget {
   _EvacuationHomePageState createState() => _EvacuationHomePageState();
 }
 
-class _EvacuationHomePageState extends State<EvacuationHomePage> {
+class _EvacuationHomePageState extends State<EvacuationHomePage>
+    with SingleTickerProviderStateMixin {
   GoogleMapController? _mapController;
   Set<Polygon> _dangerZonePolygons = {};
   Set<Marker> _markers = {};
@@ -31,10 +33,14 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
   LatLng? _destinationPosition;
   Polyline? _routePolyline;
   TextEditingController _destinationController = TextEditingController();
-  String _travelMode = "driving";
+  String _travelMode = "";
+  bool _isSearchBarExpanded = true;
   late DataFetcher _dataFetcher;
   late DataSender _dataSender;
   double _inDangerRay = 500;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+  bool _isHelpRequested = false;
   final String _googleApiKey = 'AIzaSyAtuucM4ZmPmcqZiYwGZUpme_h5CYsXVD0';
 
   @override
@@ -44,6 +50,21 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
     _setupBackgroundNotifications();
     _initLocationService();
     _inDangerRay = widget.inDangerRay;
+    // Initialize animation controller
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1), // Pulsing animation duration
+    )
+      ..repeat(reverse: true);
+
+    _animation =
+        Tween<double>(begin: 1.0, end: 1.2).animate(_animationController);
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   /// Initialize services for communication with the server
@@ -101,6 +122,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
         infoWindow: InfoWindow(title: "Your Location"),
       ));
     });
+    _centerMapOnCurrentLocation();
   }
 
   /// Handles the destination selection process
@@ -215,54 +237,83 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
 
   Widget _buildSearchBar() {
     return Positioned(
-      top: 10,
-      left: 10,
-      right: 10,
-      child: Card(
-        elevation: 4,
-        child: TypeAheadField<Map<String, dynamic>>(
-          textFieldConfiguration: TextFieldConfiguration(
-            controller: _destinationController,
-            decoration: InputDecoration(
-              hintText: "Search for a place",
-              border: OutlineInputBorder(),
-              suffixIcon: Icon(Icons.search), // Optional search icon
+      top: 16, // Match the button's top position
+      left: _isSearchBarExpanded ? 72.0 : 16.0, // Offset the search bar when expanded
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        width: _isSearchBarExpanded
+            ? MediaQuery.of(context).size.width - 100 // Adjust for button + padding
+            : 36.0, // Button size when collapsed
+        height: 36.0, // Consistent height
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28.0), // Rounded corners
+          boxShadow: [
+            if (_isSearchBarExpanded)
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+          ],
+        ),
+        child: _isSearchBarExpanded
+            ? Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: TypeAheadField<Map<String, dynamic>>(
+            textFieldConfiguration: TextFieldConfiguration(
+              controller: _destinationController,
+              decoration: InputDecoration(
+                hintText: "Enter evacuation destination",
+                border: InputBorder.none,
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            suggestionsCallback: (pattern) async {
+              if (pattern.isEmpty) return [];
+              return await fetchPlaceSuggestions(pattern, _googleApiKey);
+            },
+            itemBuilder: (context, suggestion) {
+              return ListTile(
+                title: Text(suggestion['description']),
+              );
+            },
+            onSuggestionSelected: (suggestion) async {
+              // Fetch place details and set destination
+              final placeId = suggestion['place_id'];
+              final location = await fetchPlaceDetails(placeId, _googleApiKey);
+
+              if (location != null) {
+                setState(() {
+                  _destinationPosition = location;
+                  _markers.add(Marker(
+                    markerId: MarkerId("destination"),
+                    position: location,
+                    infoWindow: InfoWindow(title: suggestion['description']),
+                  ));
+                });
+
+                // Ask for travel mode and fetch the route
+                await _askTravelMode();
+                await _onDestinationSet();
+              }
+            },
+            noItemsFoundBuilder: (context) => Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text("No places found"),
             ),
           ),
-          suggestionsCallback: (pattern) async {
-            if (pattern.isEmpty) return [];
-            return await fetchPlaceSuggestions(pattern, _googleApiKey);
+        )
+            : FloatingActionButton(
+          onPressed: () {
+            setState(() {
+              _isSearchBarExpanded = !_isSearchBarExpanded;
+            });
           },
-          itemBuilder: (context, suggestion) {
-            return ListTile(
-              title: Text(suggestion['description']),
-            );
-          },
-          onSuggestionSelected: (suggestion) async {
-            // Fetch place details and set destination
-            final placeId = suggestion['place_id'];
-            final location = await fetchPlaceDetails(placeId, _googleApiKey);
-
-            if (location != null) {
-              setState(() {
-                _destinationPosition = location;
-                _markers.add(Marker(
-                  markerId: MarkerId("destination"),
-                  position: location,
-                  infoWindow: InfoWindow(title: suggestion['description']),
-                ));
-              });
-
-              // Ask for travel mode and fetch the route
-              await _askTravelMode(); // Ask travel mode after destination is set
-              await _onDestinationSet(); // Send data to the server and fetch results
-            }
-          },
-          noItemsFoundBuilder: (context) =>
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text("No places found"),
-              ),
+          child: Icon(Icons.loop),
+          backgroundColor: Colors.blue,
+          tooltip: "Toggle Search Bar",
+          heroTag: "toggleSearchBarButton",
         ),
       ),
     );
@@ -440,39 +491,204 @@ class _EvacuationHomePageState extends State<EvacuationHomePage> {
     );
   }
 
+  /// Handle the "Need Help" action
+  Future<void> _promptForHelp() async {
+    bool? needsHelp = await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Do you need help with evacuation?"),
+          content: Text(
+              "If you select Yes, your location will be shared with other users of the app and a notification will be sent to the emergency contacts configured in the Settings page."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text("No"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text("Yes"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (needsHelp == true) {
+      if (needsHelp == true) {
+        bool? confirmHelp = await showDialog(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: Text("Are you sure?"),
+              content: Text(
+                  "Your current location will be shared with other users and emergency contacts will be notified."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text("Confirm"),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (confirmHelp == true) {
+          // For now, simulate sending location for help
+          setState(() {
+            _isHelpRequested = true; // Trigger the pulsing animation
+          }
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Help notification sent.")),
+          );
+
+          // Add logic to share location with other users or notify emergency contacts
+          _sendHelpNotification();
+        } else if (_isHelpRequested) {
+          setState(() {
+            _isHelpRequested = false; // Trigger the pulsing animation
+          }
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(" Stop sharing your location")),
+          );
+        }
+      } else if (_isHelpRequested) {
+        setState(() {
+          _isHelpRequested = false; // Trigger the pulsing animation
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(" Stop sharing your location")),
+        );
+      }
+    }
+    else if (_isHelpRequested) {
+      setState(() {
+        _isHelpRequested = false; // Trigger the pulsing animation
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(" Stop sharing your location")),
+      );
+    }
+
+  }
+
+    /// Simulate sending a help notification
+    void _sendHelpNotification() {
+      // Add your logic to share location or notify contacts
+      print("Help notification: Sharing current location $_currentPosition");
+    }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('ResQMe'),
-        backgroundColor: Colors.black12,
+        backgroundColor: Colors.blue,
       ),
       body: Stack(
         children: [
-          _currentPosition == null
-              ? Center(child: CircularProgressIndicator())
-              : _buildGoogleMap(),
-          _buildSearchBar(),
+          _buildGoogleMap(),
+          // Search Bar with Expand and Minimize Gesture
+          AnimatedPositioned(
+            duration: Duration(milliseconds: 300),
+            top: 20,
+            left: _isSearchBarExpanded ? 80 : 45.0,
+            // Align with the button when collapsed
+            right: _isSearchBarExpanded ? 10 : MediaQuery
+                .of(context)
+                .size
+                .width - 80.0,
+            height: _isSearchBarExpanded ? 48.0 : 0.0,
+            child: AnimatedOpacity(
+              duration: Duration(milliseconds: 300),
+              opacity: _isSearchBarExpanded ? 1.0 : 0.0,
+              child: _isSearchBarExpanded
+                  ? _buildSearchBar() // Use the existing search bar logic
+                  : SizedBox.shrink(),
+            ),
+          ),
+          SizedBox(width: 10.0),
+          // Floating Action Button to toggle search bar visibility
+          Positioned(
+            top: 20.0,
+            left: 16.0,
+            width: 50,
+            height: 50,
+            child: FloatingActionButton(
+              onPressed: () {
+                setState(() {
+                  _isSearchBarExpanded = !_isSearchBarExpanded;
+                });
+              },
+              child: Icon(
+                _isSearchBarExpanded ? Icons.close : Icons.search,
+              ),
+              backgroundColor: Colors.blue,
+              tooltip: _isSearchBarExpanded ? "Hide Search Bar" : "Show Search Bar",
+              heroTag: "toggleSearchBarButton",
+            ),
+          ),
           Align(
             alignment: Alignment.bottomLeft,
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(10.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FloatingActionButton(
-                    onPressed: _centerMapOnCurrentLocation,
-                    child: Icon(Icons.my_location),
-                    backgroundColor: Colors.grey,
-                    heroTag: "currentLocationButton", // Unique heroTag
+                  ScaleTransition(
+                    scale: _isHelpRequested
+                        ? _animation
+                        : AlwaysStoppedAnimation(1.0),
+                    child:
+                        SizedBox(
+                          width: 50.0, // Custom width
+                          height: 50.0, // Custom height
+                          child:
+                            FloatingActionButton
+                              (
+                              onPressed: _promptForHelp,
+                              child: Icon(Icons.warning_amber_outlined),
+                              backgroundColor: Colors.red,
+                              heroTag: "helpButton",
+                              tooltip: "Need Help",
+                            ),
+                        ),
                   ),
-                  SizedBox(height: 16.0), // Space between the buttons
-                  FloatingActionButton(
-                    onPressed: _goToSettingsPage,
-                    child: Icon(Icons.settings),
-                    backgroundColor: Colors.grey,
-                    heroTag: "settingsButton", // Unique heroTag
+                  SizedBox(height: 10.0), // Space between buttons
+                  SizedBox(
+                    width: 50.0, // Custom width
+                    height: 50.0, // Custom height
+                    child:
+                        FloatingActionButton(
+                          onPressed: _centerMapOnCurrentLocation,
+                          child: Icon(Icons.my_location),
+                          backgroundColor: Colors.blue,
+                          heroTag: "currentLocationButton",
+                          tooltip: "Go to My Location",
+                        ),
+                  ),
+                  SizedBox(height: 10.0),
+                  SizedBox(
+                    width: 50.0, // Custom width
+                    height: 50.0, // Custom height
+                    child:
+                    FloatingActionButton(
+                      onPressed: _goToSettingsPage,
+                      child: Icon(Icons.settings),
+                      backgroundColor: Colors.blue,
+                      heroTag: "settingsButton",
+                      tooltip: "Go to Settings",
+                    ),
                   ),
                 ],
               ),
