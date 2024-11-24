@@ -30,7 +30,7 @@ List<Map<String, dynamic>> getDangerZonesWithinRay(LatLng currentLocation, doubl
   Random random = Random();
   List<Map<String, dynamic>> dangerZones = [];
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 6; i++) {
     // Generate random offsets for the polygon vertices, ensuring non-intersection
     double baseLat = currentLocation.latitude + (random.nextDouble() * 0.01) - 0.005;
     double baseLng = currentLocation.longitude + (random.nextDouble() * 0.01) - 0.005;

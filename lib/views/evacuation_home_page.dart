@@ -7,6 +7,7 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:http/http.dart' as http;
+import '../helper/generate_danger_zones.dart';
 import 'navigation_screen.dart';
 
 
@@ -49,7 +50,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
   @override
   void initState() {
     super.initState();
-    _initializeServices();
+    //_initializeServices();
     _setupBackgroundNotifications();
     _initLocationService();
     _inDangerRay = widget.inDangerRay;
@@ -126,6 +127,9 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
       ));
     });
     _centerMapOnCurrentLocation();
+
+    var dangerZones = getDangerZonePolygons(_currentPosition!, _inDangerRay);
+    _dangerZonePolygons = dangerZones;
   }
 
   /// Handles the destination selection process
@@ -152,39 +156,40 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
     }
     try {
       // Fetch processed data from the server
-      final data = await _dataFetcher.fetchProcessedData(
-        _currentPosition!,
-        _destinationPosition!,
-      );
+    //  final data = await _dataFetcher.fetchProcessedData(
+    //    _currentPosition!,
+    //    _destinationPosition!,
+    //  );
 
       // Validate response data
-      final List<dynamic> route = data["path"] ?? [];
-      final List<dynamic> dangerZones = data["danger_zone"] ?? [];
-
-      if (route.isEmpty || dangerZones.isEmpty) {
-        throw Exception("Invalid data received: $data");
-      }
+     // final List<dynamic> route = data["path"] ?? [];
+    //  final List<dynamic> dangerZones = data["danger_zone"] ?? [];
+      var route = findSafeRoutePolygons(_currentPosition!, _destinationPosition!, _dangerZonePolygons);
+      var  route_a = await getActualRoutePolyline(route, _travelMode, _googleApiKey);
+      //if (route.isEmpty || dangerZones.isEmpty) {
+      //  throw Exception("Invalid data received: $data");
+   //   }
 
       // Convert route to polyline
-      final polylinePoints = route.map((point) => LatLng(point[1], point[0]))
-          .toList();
+     // final polylinePoints = route.map((point) => LatLng(point[1], point[0]))
+      //    .toList();
 
       // Convert danger zones to polygons
-      final dangerZonePolygons = dangerZones.map((zone) {
-        final points = (zone as List)
-            .map((point) => LatLng(point[1], point[0]))
-            .toList();
-        return Polygon(
-          polygonId: PolygonId(zone.hashCode.toString()),
-          points: points,
-          fillColor: Colors.red.withOpacity(0.3),
-          strokeColor: Colors.red,
-          strokeWidth: 2,
-        );
-      }).toSet();
+      // final dangerZonePolygons = dangerZones.map((zone) {
+      //   final points = (zone as List)
+      //       .map((point) => LatLng(point[1], point[0]))
+      //       .toList();
+      //   return Polygon(
+      //     polygonId: PolygonId(zone.hashCode.toString()),
+      //     points: points,
+      //     fillColor: Colors.red.withOpacity(0.3),
+      //     strokeColor: Colors.red,
+      //     strokeWidth: 2,
+      //   );
+      // }).toSet();
 
       List<LatLng> safeRouteListPoints = await getActualRoutePolyline(
-          polylinePoints, _travelMode, _googleApiKey);
+          route_a, _travelMode, _googleApiKey);
       setState(() {
         _routePolyline = Polyline(
           polylineId: PolylineId("route"),
@@ -192,7 +197,7 @@ class _EvacuationHomePageState extends State<EvacuationHomePage>
           color: Colors.blue,
           width: 4,
         );
-        _dangerZonePolygons = dangerZonePolygons;
+
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
